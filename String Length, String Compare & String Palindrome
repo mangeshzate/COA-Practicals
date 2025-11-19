@@ -1,0 +1,175 @@
+; --- NASM Assembly Program 2: Length, Compare, Palindrome ---
+; Build command: nasm -f elf64 filename.asm && ld filename.o -o filename
+; Run command: ./filename
+
+%macro read 2
+    mov rax, 0
+    mov rdi, 0
+    mov rsi, %1
+    mov rdx, %2
+    syscall
+%endmacro
+
+%macro write 2
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, %1
+    mov rdx, %2
+    syscall
+%endmacro
+
+section .data
+msg_start   db 10, "** String Operations: Length, Compare, Palindrome **", 10
+len_start   equ $ - msg_start
+msg1        db "Enter String1: ", 0AH
+len1        equ $ - msg1
+msg2        db "Enter String2: ", 0AH
+len2        equ $ - msg2
+
+; Length Message
+msg_l_title db 10, "--- 1. STRING LENGTH (String1) ---", 0AH
+len_l_title equ $ - msg_l_title
+msg_l_out   db "The length of String1 is: ", 0AH
+len_l_out   equ $ - msg_l_out
+
+; Compare Messages
+msg_eq      db 10, "--- 2. STRING COMPARE (String1 vs String2) ---", 10, "RESULT: Strings are EQUAL.", 0AH
+len_eq      equ $ - msg_eq
+msg_neq     db 10, "--- 2. STRING COMPARE (String1 vs String2) ---", 10, "RESULT: Strings are NOT equal.", 0AH
+len_neq     equ $ - msg_neq
+
+; Palindrome Messages
+msg_p_title db 10, "--- 3. PALINDROME CHECK (String1) ---", 0AH
+len_p_title equ $ - msg_p_title
+msg_p_y     db "RESULT: String1 IS a palindrome.", 0AH
+len_p_y     equ $ - msg_p_y
+msg_p_n     db "RESULT: String1 IS NOT a palindrome.", 0AH
+len_p_n     equ $ - msg_p_n
+
+section .bss
+string1 resb 20
+string2 resb 20
+string3 resb 20 ; For reversal/comparison in palindrome check
+l1      resq 1
+l2      resq 1
+choice  resb 2
+char_buff resb 16 ; For display function
+
+section .text
+global _start
+
+_start:
+    write msg_start, len_start
+    ; Read String 1
+    write msg1, len1
+    read string1, 20
+    dec rax
+    mov [l1], rax
+    ; Read String 2
+    write msg2, len2
+    read string2, 20
+    dec rax
+    mov [l2], rax
+
+    call strlen
+    call strcmp
+    call strpal
+    
+    jmp exit
+
+; -------------------------------------------
+; STRING LENGTH (String1)
+; -------------------------------------------
+strlen:
+    write msg_l_title, len_l_title
+    write msg_l_out, len_l_out
+    mov rbx, qword [l1]
+    call display
+    ret
+
+; -------------------------------------------
+; STRING COMPARE (String1 vs String2)
+; -------------------------------------------
+strcmp:
+    mov rbx, qword [l1]
+    cmp rbx, qword [l2]
+    jne nonequal        ; Lengths are different
+    
+    mov rsi, string1
+    mov rdi, string2
+    mov rcx, rbx
+    cld
+    repe cmpsb          ; Compare byte by byte
+    jne nonequal
+    
+    write msg_eq, len_eq
+    ret
+
+nonequal:
+    write msg_neq, len_neq
+    ret
+
+; -------------------------------------------
+; STRING PALINDROME (String1)
+; -------------------------------------------
+strpal:
+    write msg_p_title, len_p_title
+    
+    ; Reverse string1 into string3
+    mov rsi, string1
+    mov rbx, qword [l1]
+    add rsi, rbx
+    dec rsi         ; RSI points to the last character of string1
+    mov rdi, string3
+    mov rcx, rbx
+up1:
+    mov dl, byte [rsi]
+    mov byte [rdi], dl
+    dec rsi
+    inc rdi
+    dec rcx
+    jnz up1
+    
+    ; Compare original string1 with reversed string3
+    mov rsi, string1
+    mov rdi, string3
+    mov rcx, qword [l1]
+    cld
+    repe cmpsb      ; Compare byte by byte
+    jne notequal1
+    
+    write msg_p_y, len_p_y
+    ret
+
+notequal1:
+    write msg_p_n, len_p_n
+    ret
+
+; -------------------------------------------
+; DISPLAY (Helper function to print RBX as decimal number)
+; -------------------------------------------
+display:
+    mov rsi, char_buff
+    mov rcx, 16
+
+up2:
+    rol rbx, 4
+    mov dl, bl
+    and dl, 0x0F
+    cmp dl, 9
+    jbe add30
+    add dl, 7
+add30:
+    add dl, 30h
+    mov byte [rsi], dl
+    inc rsi
+    dec rcx
+    jnz up2
+
+    write char_buff, 16
+    ret
+
+exit:
+    mov rax, 60
+    mov rdi, 0
+    syscall
