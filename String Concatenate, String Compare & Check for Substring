@@ -1,0 +1,189 @@
+; --- NASM Assembly Program 1: Concat, Compare, Substring ---
+; Build command: nasm -f elf64 filename.asm && ld filename.o -o filename
+; Run command: ./filename
+
+%macro read 2
+    mov rax, 0
+    mov rdi, 0
+    mov rsi, %1
+    mov rdx, %2
+    syscall
+%endmacro
+
+%macro write 2
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, %1
+    mov rdx, %2
+    syscall
+%endmacro
+
+section .data
+msg_start   db 10, "** String Operations: Concat, Compare, Substring **", 10
+len_start   equ $ - msg_start
+msg1        db "Enter String1 (Main String): ", 0AH
+len1        equ $ - msg1
+msg2        db "Enter String2 (Substring/Compare String): ", 0AH
+len2        equ $ - msg2
+
+; Concatenate Messages
+msg_c_title db 10, "--- 1. CONCATENATION ---", 10
+len_c_title equ $ - msg_c_title
+msg_c_out   db "The concatenated string (String1 + String2) is: ", 0AH
+len_c_out   equ $ - msg_c_out
+
+; Compare Messages
+msg_eq      db 10, "--- 2. STRING COMPARE ---", 10, "RESULT: Strings are EQUAL.", 0AH
+len_eq      equ $ - msg_eq
+msg_neq     db 10, "--- 2. STRING COMPARE ---", 10, "RESULT: Strings are NOT equal.", 0AH
+len_neq     equ $ - msg_neq
+
+; Substring Messages
+msg_sub_t   db 10, "--- 3. SUBSTRING CHECK (Is String2 in String1?) ---", 0AH
+len_sub_t   equ $ - msg_sub_t
+msg_sub_y   db "RESULT: String2 IS a substring of String1.", 0AH
+len_sub_y   equ $ - msg_sub_y
+msg_sub_n   db "RESULT: String2 IS NOT a substring of String1.", 0AH
+len_sub_n   equ $ - msg_sub_n
+
+section .bss
+string1 resb 20
+string2 resb 20
+string3 resb 40  ; For concatenation
+l1      resq 1
+l2      resq 1
+l3      resq 1   ; For concatenated length
+
+section .text
+global _start
+
+_start:
+    write msg_start, len_start
+    ; Read String 1
+    write msg1, len1
+    read string1, 20
+    dec rax
+    mov [l1], rax
+    ; Read String 2
+    write msg2, len2
+    read string2, 20
+    dec rax
+    mov [l2], rax
+    
+    call concat
+    call strcmp
+    call substr
+    
+    jmp exit
+
+; -------------------------------------------
+; CONCATENATION (String1 + String2 -> String3)
+; -------------------------------------------
+concat:
+    write msg_c_title, len_c_title
+    mov rsi, string1
+    mov rdi, string3
+    mov rcx, qword [l1]
+    cld
+    rep movsb           ; Copy string1 to string3
+    mov rsi, string2
+    mov rcx, qword [l2]
+    rep movsb           ; Append string2 to string3
+    
+    mov rbx, qword [l1]
+    add rbx, qword [l2]
+    mov [l3], rbx       ; Store new length
+    
+    write msg_c_out, len_c_out
+    mov rdx, rbx
+    write string3, rdx
+    ret
+
+; -------------------------------------------
+; STRING COMPARE (String1 vs String2)
+; -------------------------------------------
+strcmp:
+    mov rbx, qword [l1]
+    cmp rbx, qword [l2]
+    jne nonequal        ; Lengths are different
+    
+    mov rsi, string1
+    mov rdi, string2
+    mov rcx, rbx
+    cld
+    repe cmpsb          ; Compare byte by byte
+    jne nonequal
+    
+    write msg_eq, len_eq
+    ret
+
+nonequal:
+    write msg_neq, len_neq
+    ret
+
+; -------------------------------------------
+; SUBSTRING (Is String2 in String1?)
+; -------------------------------------------
+substr:
+    write msg_sub_t, len_sub_t
+    
+    mov r9, qword [l1]  ; r9 = length of string1 (outer loop counter)
+    mov r10, qword [l2] ; r10 = length of string2
+    mov rsi, string1    ; rsi = string1 pointer
+    mov rdi, string2    ; rdi = string2 pointer
+    
+    cmp r9, r10         ; If l1 < l2, substring is impossible
+    jl not_found
+    
+sub_outer:
+    mov al, byte [rsi]
+    cmp al, byte [rdi]
+    je sub_inner        ; First character matches, check rest
+    
+    inc rsi             ; Move to next char in string1
+    dec r9
+    cmp r9, 0
+    jg sub_outer
+    jmp not_found
+
+sub_inner:
+    push rsi            ; Save string1 position
+    push r9             ; Save remaining length of string1
+    mov rcx, r10        ; rcx = length of string2 (inner loop counter)
+    
+sub_match_loop:
+    inc rsi             ; Move to next char in string1
+    inc rdi             ; Move to next char in string2
+    dec rcx
+    jz found            ; Found, inner loop complete
+    
+    mov al, byte [rsi]
+    cmp al, byte [rdi]
+    jne sub_mismatch
+    
+    jmp sub_match_loop
+
+sub_mismatch:
+    pop r9              ; Restore remaining length of string1
+    pop rsi             ; Restore string1 position
+    inc rsi             ; Move string1 pointer one step further (Start next search)
+    mov rdi, string2    ; Reset string2 pointer
+    dec r9              ; Decrement string1 length
+    cmp r9, 0
+    jg sub_outer
+    jmp not_found
+
+found:
+    pop r9              ; Clean up stack
+    pop rsi
+    write msg_sub_y, len_sub_y
+    ret
+
+not_found:
+    write msg_sub_n, len_sub_n
+    ret
+
+exit:
+    mov rax, 60
+    mov rdi, 0
+    syscall
