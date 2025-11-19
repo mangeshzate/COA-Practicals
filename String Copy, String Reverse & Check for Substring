@@ -1,0 +1,181 @@
+; --- NASM Assembly Program 3: Copy, Reverse, Substring ---
+; Build command: nasm -f elf64 filename.asm && ld filename.o -o filename
+; Run command: ./filename
+
+%macro read 2
+    mov rax, 0
+    mov rdi, 0
+    mov rsi, %1
+    mov rdx, %2
+    syscall
+%endmacro
+
+%macro write 2
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, %1
+    mov rdx, %2
+    syscall
+%endmacro
+
+section .data
+msg_start   db 10, "** String Operations: Copy, Reverse, Substring **", 10
+len_start   equ $ - msg_start
+msg1        db "Enter String1 (Main String): ", 0AH
+len1        equ $ - msg1
+msg2        db "Enter String2 (Substring): ", 0AH
+len2        equ $ - msg2
+
+; Copy Messages
+msg_c_title db 10, "--- 1. STRING COPY (String1 -> String3) ---", 10
+len_c_title equ $ - msg_c_title
+msg_c_out   db "The copied string (String3) is: ", 0AH
+len_c_out   equ $ - msg_c_out
+
+; Reverse Messages
+msg_r_title db 10, "--- 2. STRING REVERSE (String1 -> String3) ---", 10
+len_r_title equ $ - msg_r_title
+msg_r_out   db "The reversed string (String3) is: ", 0AH
+len_r_out   equ $ - msg_r_out
+
+; Substring Messages
+msg_sub_t   db 10, "--- 3. SUBSTRING CHECK (Is String2 in String1?) ---", 0AH
+len_sub_t   equ $ - msg_sub_t
+msg_sub_y   db "RESULT: String2 IS a substring of String1.", 0AH
+len_sub_y   equ $ - msg_sub_y
+msg_sub_n   db "RESULT: String2 IS NOT a substring of String1.", 0AH
+len_sub_n   equ $ - msg_sub_n
+
+section .bss
+string1 resb 20
+string2 resb 20
+string3 resb 40 ; Target for copy/reverse
+l1      resq 1
+l2      resq 1
+
+section .text
+global _start
+
+_start:
+    write msg_start, len_start
+    ; Read String 1
+    write msg1, len1
+    read string1, 20
+    dec rax
+    mov [l1], rax
+    ; Read String 2
+    write msg2, len2
+    read string2, 20
+    dec rax
+    mov [l2], rax
+    
+    call strcpy
+    call strrev
+    call substr
+    
+    jmp exit
+
+; -------------------------------------------
+; STRING COPY (String1 -> String3)
+; -------------------------------------------
+strcpy:
+    write msg_c_title, len_c_title
+    mov rsi, string1
+    mov rdi, string3
+    mov rcx, qword [l1]
+    cld
+    rep movsb
+    write msg_c_out, len_c_out
+    mov rdx, qword [l1]
+    write string3, rdx
+    ret
+
+; -------------------------------------------
+; STRING REVERSE (String1 -> String3)
+; -------------------------------------------
+strrev:
+    write msg_r_title, len_r_title
+    mov rsi, string1
+    mov rbx, qword [l1]
+    add rsi, rbx
+    dec rsi         ; RSI points to the last character of string1
+    mov rdi, string3
+    mov rcx, rbx
+up:
+    mov bl, byte [rsi]
+    mov byte [rdi], bl
+    dec rsi
+    inc rdi
+    dec rcx
+    jnz up
+    write msg_r_out, len_r_out
+    mov rdx, qword [l1]
+    write string3, rdx
+    ret
+
+; -------------------------------------------
+; SUBSTRING (Is String2 in String1?)
+; -------------------------------------------
+substr:
+    write msg_sub_t, len_sub_t
+    
+    mov r9, qword [l1]  ; r9 = length of string1 (outer loop counter)
+    mov r10, qword [l2] ; r10 = length of string2
+    mov rsi, string1    ; rsi = string1 pointer
+    mov rdi, string2    ; rdi = string2 pointer
+    
+    cmp r9, r10         ; If l1 < l2, substring is impossible
+    jl not_found_sub
+    
+sub_outer:
+    mov al, byte [rsi]
+    cmp al, byte [rdi]
+    je sub_inner        ; First character matches, check rest
+    
+    inc rsi             ; Move to next char in string1
+    dec r9
+    cmp r9, 0
+    jg sub_outer
+    jmp not_found_sub
+
+sub_inner:
+    push rsi            ; Save string1 position
+    push r9             ; Save remaining length of string1
+    mov rcx, r10        ; rcx = length of string2 (inner loop counter)
+    
+sub_match_loop:
+    inc rsi             ; Move to next char in string1
+    inc rdi             ; Move to next char in string2
+    dec rcx
+    jz found_sub        ; Found, inner loop complete
+    
+    mov al, byte [rsi]
+    cmp al, byte [rdi]
+    jne sub_mismatch
+    
+    jmp sub_match_loop
+
+sub_mismatch:
+    pop r9              ; Restore remaining length of string1
+    pop rsi             ; Restore string1 position
+    inc rsi             ; Move string1 pointer one step further (Start next search)
+    mov rdi, string2    ; Reset string2 pointer
+    dec r9              ; Decrement string1 length
+    cmp r9, 0
+    jg sub_outer
+    jmp not_found_sub
+
+found_sub:
+    pop r9              ; Clean up stack
+    pop rsi
+    write msg_sub_y, len_sub_y
+    ret
+
+not_found_sub:
+    write msg_sub_n, len_sub_n
+    ret
+
+exit:
+    mov rax, 60
+    mov rdi, 0
+    syscall
