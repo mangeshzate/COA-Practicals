@@ -1,0 +1,119 @@
+%macro WRITE 2
+    mov rax,1
+    mov rdi,1
+    mov rsi,%1
+    mov rdx,%2
+    syscall
+%endmacro
+
+%macro READ 2
+    mov rax,0
+    mov rdi,0
+    mov rsi,%1
+    mov rdx,%2
+    syscall
+%endmacro
+
+%macro EXIT 0
+    mov rax,60
+    mov rdi,0
+    syscall
+%endmacro
+
+section .data
+msg1 db "Enter first 64-bit hex number: ",10
+len1 equ $-msg1
+msg2 db "Enter second 64-bit hex number: ",10
+len2 equ $-msg2
+
+msg_mul_hi db 10,"High 64 bits = ",10
+len_mul_hi equ $-msg_mul_hi
+msg_mul_lo db "Low 64 bits  = ",10
+len_mul_lo equ $-msg_mul_lo
+msg_sub db 10,"Subtraction = ",10
+len_sub equ $-msg_sub
+
+section .bss
+ A resq 1
+ B resq 1
+ HI resq 1
+ LO resq 1
+ buf resb 32
+
+section .text
+global _start
+
+_start:
+    ; ---- INPUT ----
+    WRITE msg1,len1
+    READ buf,17
+    call accept
+    mov [A],rbx
+
+    WRITE msg2,len2
+    READ buf,17
+    call accept
+    mov [B],rbx
+
+    ; ---- MULTIPLICATION ----
+    mov rax,[A]
+    mul qword[B]        ; RDX:RAX = product
+    mov [HI],rdx
+    mov [LO],rax
+
+    WRITE msg_mul_hi,len_mul_hi
+    mov rbx,[HI]
+    call display
+
+    WRITE msg_mul_lo,len_mul_lo
+    mov rbx,[LO]
+    call display
+
+    ; ---- SUBTRACTION ----
+    mov rax,[A]
+    sub rax,[B]
+    mov [HI],rax
+
+    WRITE msg_sub,len_sub
+    mov rbx,[HI]
+    call display
+
+    EXIT
+
+
+; ===== accept hex → RBX =====
+accept:
+    mov rsi,buf
+    xor rbx,rbx
+    mov rcx,16
+.loop:
+    mov al,[rsi]
+    cmp al,0x39
+    jbe .num
+    sub al,7
+.num:
+    sub al,0x30
+    shl rbx,4
+    or  rbx,rax
+    inc rsi
+    loop .loop
+    ret
+
+; ===== display RBX (16 hex chars) =====
+display:
+    mov rcx,16
+    mov rsi,buf
+.loop2:
+    rol rbx,4
+    mov al,bl
+    and al,0x0F
+    cmp al,9
+    jbe .num2
+    add al,7
+.num2:
+    add al,0x30
+    mov [rsi],al
+    inc rsi
+    loop .loop2
+    WRITE buf,16
+    ret
